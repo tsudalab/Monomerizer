@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
 # This script takes a isomeric SMILES file as input and outputs a seq (like fasta) file with the corresponding amino acid sequence.
-# The script also outputs a isomeric SMILES file with the ncAAs (non-canonical amino acid) labeled as "X".
+# The script also outputs a isomeric SMILES file with the NNAA (non-natural amino acid) labeled as "X".
 # Any compound connected to a valid backbone is considered as individual amino acid.
-# The NNAAs that do not possess a valid backbone "[NH,NH2]CC(=O)O" required to continuously form peptide bonds, are considered as terminal modifications, and are labelled as "Z"
+# The NNAAs that do not possess a valid backbone "[NH,NH2]CC(=O)O" required to continuously form peptide bonds, are considered as terminal modifications, and are named as "X0ter", "X1ter", etc.
 
-import os, datetime, csv
+import os
 from rdkit import Chem
 from rdkit.Chem.Draw import rdMolDraw2D
 from rdkit.Chem import RegistrationHash
@@ -23,7 +23,7 @@ import multiprocessing as mp
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Process SMILES files and generate amino acid sequences.")
-    parser.add_argument("--input_fn", help="Input SMILES file")
+    parser.add_argument("input_fn", help="Input SMILES file")
     parser.add_argument("--process_cyclic", action="store_true", help="Process cyclic peptides")
     parser.add_argument("--min_amino_acids", type=int, default=3, help="Minimum number of amino acids")
     parser.add_argument("--batch_size", type=int, default=100, help="Batch size")
@@ -490,7 +490,7 @@ def remove_peptide_bonds(rwmol):
     current_bond_idx = rwmol.GetNumBonds() - 1
     while current_bond_idx >= 0:
         current_bond = rwmol.GetBondWithIdx(current_bond_idx)
-        if current_bond.HasProp("peptide_bond"):
+        if current_bond.HasProp("peptide_bond") and current_bond.IsInRing() == False:
             begin_atom_idx, end_atom_idx = current_bond.GetBeginAtomIdx(), current_bond.GetEndAtomIdx()
             rwmol.RemoveBond(
                 begin_atom_idx, end_atom_idx
@@ -524,37 +524,16 @@ def enlist_NNAA(new_NNAA, df, ter_or_not, bond_atom_indices):
     return df
 
 def add_IDs(df):
-    # Initialize separate counters for 'ter' and 'NotTer'
-    not_ter_counter = 0
-    ter_counter = 0
-
-    # Get unique tautomer groups
+    # group df by TAUTOMER HASH
     tautomer_groups = df['TAUTOMER HASH'].drop_duplicates().reset_index(drop=True)
+    
+    for i, tautomer_hash in enumerate(tautomer_groups):
+        df.loc[df['TAUTOMER HASH'] == tautomer_hash, 'ID'] = f"X{i}"
 
-    for tautomer_hash in tautomer_groups:
-        # Assign 'X' for non-terminal rows and 'Z' for terminal rows
-        if any(df['TAUTOMER HASH'] == tautomer_hash):
-            # For non-terminal groups (NotTer)
-            if (df['TERMINAL'] != 'ter').any():
-                df.loc[(df['TAUTOMER HASH'] == tautomer_hash) & (df['TERMINAL'] != 'ter'), 'ID'] = f"X{not_ter_counter}"
-                not_ter_counter += 1
-            
-            # For terminal groups (ter)
-            if (df['TERMINAL'] == 'ter').any():
-                df.loc[(df['TAUTOMER HASH'] == tautomer_hash) & (df['TERMINAL'] == 'ter'), 'ID'] = f"Z{ter_counter}"
-                ter_counter += 1
+    # if ['TERMINAL'] == 'ter', add 'ter' to the ID
+    df.loc[df['TERMINAL'] == 'ter', 'ID'] = df['ID'] + 'ter'
 
     return df
-
-def draw_NNAAs(NNAA_name, count, top_SMILES):
-    legend = f"{NNAA_name}\nSeen {count} times in the output sequences.\n{top_SMILES}"
-    view = rdMolDraw2D.MolDraw2DSVG(450, 300)
-    view.DrawMolecule(Chem.MolFromSmiles(top_SMILES), legend=legend)
-    view.FinishDrawing()
-    svg = view.GetDrawingText()
-    NNAA_graph_path = os.path.join(output_dir, f"{NNAA_name}.svg")
-    with open(NNAA_graph_path, "w") as f:
-        f.write(svg)
 
 def relabel_NNAA(mol, NNAA_df):
     visited_Unk_labels, visited_NNAA_labels = [], []
@@ -815,7 +794,6 @@ def label_molecules_in_batches(mol_df, batch_size, smi2mol, ignore_cyclic_peptid
 def relabel_batch(mol_df, NNAA_df):
     # Initialize a list to collect row data
     local_mol_data = []
-    local_NNAA_counts = {}
 
     for _, row in mol_df.iterrows():
         mol_index = row['ID']
@@ -840,11 +818,7 @@ def relabel_batch(mol_df, NNAA_df):
 
             if error:
                 seq = ""
-            
-            else: # If successful, count amino acids and draw the molecule
-                local_NNAA_counts = count_aminos(split_seq, local_NNAA_counts)
-                # draw_input_mol(mol, mol_index, seq, bond_highlights)
-        
+
         except Exception as e:
             error = str(e)  # Ensure error is a string
             seq = ""
@@ -852,21 +826,17 @@ def relabel_batch(mol_df, NNAA_df):
         # Collect data in a list of dictionaries
         local_mol_data.append({'ID': mol_index, 'SEQUENCE': seq, 'ERROR': error})
 
-    return pd.DataFrame(local_mol_data), local_NNAA_counts
+    return pd.DataFrame(local_mol_data)
 
 def relabel_batches(mol_df, NNAA_df, batch_size):
     # Check if NNAA_df is empty
     if NNAA_df.empty:
         print("Warning: NNAA_df is empty. No NNAAs to process.")
-        return NNAA_df, mol_df
+        return mol_df
 
     # Ensure NNAA_df has an index
     if NNAA_df.index.empty:
         NNAA_df = NNAA_df.reset_index(drop=True)
-
-    # Now set the COUNT column
-    NNAA_df['COUNT'] = 0
-
     mol_df_copy = mol_df[mol_df['MOL'] != ""].copy()
     indices = list(mol_df_copy.index)
 
@@ -880,22 +850,15 @@ def relabel_batches(mol_df, NNAA_df, batch_size):
             batch_indices = indices[i:i + batch_size]
             futures.append(executor.submit(process_batch, batch_indices))
 
-        local_NNAA_df = NNAA_df.copy()
         local_mol_df = mol_df.copy()
 
         for future in tqdm(as_completed(futures), total=len(futures), desc="4/4 Relabelling mols"):
-            mol_dataset_per_batch, NNAA_counts_per_batch = future.result()
+            mol_dataset_per_batch = future.result()
 
             for _, row in mol_dataset_per_batch.iterrows():
                 local_mol_df.loc[local_mol_df['ID'] == row['ID'], ['SEQUENCE', 'ERROR']] = row[['SEQUENCE', 'ERROR']].values
 
-            for local_NNAA_ID, counts in NNAA_counts_per_batch.items():
-                if local_NNAA_ID in local_NNAA_df['ID'].values:
-                    local_NNAA_df.loc[local_NNAA_df['ID'] == local_NNAA_ID, 'COUNT'] += counts
-                else:
-                    print(f"Warning: NNAA ID {local_NNAA_ID} not found in NNAA_df")
-
-    return local_NNAA_df, local_mol_df
+    return local_mol_df
 
 
 
@@ -911,25 +874,11 @@ def output_NNAA(NNAA_df, output_dir):
         TAUTOMERS=('SMILES', lambda x: ','.join(x.unique())),
         TERMINAL=('TERMINAL', 'first'),
         BOND_SITES=('BOND SITES', 'first'),
-        COUNT=('COUNT', 'sum')
     ).reset_index().drop_duplicates(subset='TAUTOMER HASH', keep='first')
 
     NNAA_df = NNAA_df.drop(columns=['TAUTOMER HASH'])
 
-    # Sort the DataFrame by 'COUNT' in descending order
-    NNAA_df = NNAA_df.sort_values('COUNT', ascending=False)
-
-    # Process each row and draw NNAAs
-    rows_to_keep = []
-    for idx, row in NNAA_df.iterrows():
-        count = row['COUNT']
-        if count > 0:
-            # draw_NNAAs(row['ID'], count, row['SMILES'])
-            rows_to_keep.append(idx)
-
-    # Filter the DataFrame to keep only rows that are used (with COUNT > 0)
-    NNAA_df = NNAA_df.loc[rows_to_keep]
-    NNAA_df.to_csv(os.path.join(output_dir, "NNAA.txt"), sep='\t', index=False)
+    NNAA_df.to_csv(os.path.join(output_dir, "ncAAs_raw.txt"), sep='\t', index=False)
 
 
 def output_mols(mol_df, output_dir):
@@ -939,7 +888,7 @@ def output_mols(mol_df, output_dir):
     cols = ['ID', 'SEQUENCE'] + [col for col in mol_df.columns if col not in ['ID', 'SEQUENCE']]
     mol_df = mol_df[cols]
 
-    mol_df.to_csv(os.path.join(output_dir, "mols.txt"), sep='\t', index=False)
+    mol_df.to_csv(os.path.join(output_dir, "sequences_raw.txt"), sep='\t', index=False)
 
 def get_rdkit_tautomer_hash(smi):
     mol = Chem.MolFromSmiles(smi)
@@ -951,17 +900,16 @@ def get_rdkit_tautomer_hash(smi):
 def main():
     mol_df = load_data(input_fn)
     NNAA_df, mol_df = label_molecules_in_batches(mol_df, batch_size, smi2mol, ignore_cyclic_peptide, min_amino_acids)
+    print(NNAA_df)
     NNAA_df['TAUTOMER HASH'] = NNAA_df['SMILES'].apply(get_rdkit_tautomer_hash)
     NNAA_df = NNAAs_with_OH_removed(NNAA_df)
     NNAA_df = add_IDs(NNAA_df)
-    NNAA_df, mol_df = relabel_batches(mol_df, NNAA_df, batch_size)
+    mol_df = relabel_batches(mol_df, NNAA_df, batch_size)
     output_NNAA(NNAA_df, output_dir)
     output_mols(mol_df, output_dir)
 
 if __name__ == '__main__':
-    output_dir = os.path.join(
-        output_dir, datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    )
+    output_dir = 'output'
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
