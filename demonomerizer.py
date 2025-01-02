@@ -9,8 +9,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Parse the input arguments
 parser = argparse.ArgumentParser(description="Preprocess the generated sequences file")
-parser.add_argument("--input_file", type=str, help="Path to the generated sequences file", default="dedup_generated.txt")
-parser.add_argument("--NNAA_file", type=str, help="Path to the NNAA file", default="NNAA.txt")
+parser.add_argument("--input_file", type=str, help="Path to the generated sequences file", default="output/sequences_generated.txt")
+parser.add_argument("--NNAA_file", type=str, help="Path to the NNAA file", default="output/ncAAs_standard.txt")
 parser.add_argument("--batch_size", type=int, help="Batch size for processing sequences", default=10)
 args = parser.parse_args()
 
@@ -199,5 +199,5 @@ with ThreadPoolExecutor() as executor:
                 df.at[index, "SMILES"] = smiles
 
 # Save output
-output_file = f"demonomerized_{args.input_file.split('/')[-1]}"
+output_file = f"output/sequences_generated_demonomerized.txt"
 df.to_csv(output_file, sep="\t", index=False)
