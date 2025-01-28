@@ -30,7 +30,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run a pipeline of programs sequentially.")
     
     # Add arguments
-    parser.add_argument("--input_file", default="example_smiles.txt", help="Input file for the pipeline")
+    parser.add_argument("--input_file", default="demo/example_smiles.txt", help="Input file for the pipeline")
     parser.add_argument("--output_dir", default=f"output/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}", help="Output directory")
     parser.add_argument("--process_cyclic", action="store_true", help="Process cyclic compounds")
     parser.add_argument("--min_amino_acids", type=int, help="Minimum number of amino acids required")

@@ -660,6 +660,10 @@ def load_data(input_file):
     print("0/4 Loading input data...")
     df = pd.read_csv(input_file, sep='\t', on_bad_lines='warn')
 
+    # Check if the 'ID' column exists
+    if 'ID' not in df.columns:
+        df['ID'] = range(1, len(df) + 1)  # Create an 'ID' column with unique sequential numbers
+
     # Check if the 'ISOSMILES' column exists
     if 'ISOSMILES' not in df.columns:
         df['ISOSMILES'] = None  # Create an empty 'ISOSMILES' column if it doesn't exist
