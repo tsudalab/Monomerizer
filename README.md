@@ -26,7 +26,8 @@ python3 run_pipeline.py --input_file demo/example_smiles.txt
 - `--min_amino_acids <int>`: Minimum number of amino acids required for processing. Default is `3`.
 - `--batch_size <int>`: Number of SMILES to process in each batch. Default is `100`.
 - `--max_workers <int>`: Maximum number of parallel workers. Default is the number of available CPU cores.
-- `-draw`: Draws output file like this. 
+- `-draw`: Draws output file like this.
+
 ![alt text](demo/example.svg)
 
 ---
