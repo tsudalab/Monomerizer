@@ -7,28 +7,27 @@
 
 import os
 from rdkit import Chem
-from rdkit.Chem.Draw import rdMolDraw2D
 from rdkit.Chem import RegistrationHash
 from rdkit.Chem.RegistrationHash import HashLayer
-from collections import deque, defaultdict
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
+from collections import deque
 import argparse
 from tqdm import tqdm
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing as mp
+from draw import MoleculeDrawer
+from collections import defaultdict
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Process SMILES files and generate amino acid sequences.")
-    parser.add_argument("--input_file", default="example_smiles.txt", help="Input SMILES file")
+    parser.add_argument("--input_file", default="demo/example_smiles.txt", help="Input SMILES file")
     parser.add_argument("-process_cyclic", action="store_true", help="Process cyclic peptides")
     parser.add_argument("--min_amino_acids", type=int, default=3, help="Minimum number of amino acids")
     parser.add_argument("--batch_size", type=int, default=100, help="Batch size")
     parser.add_argument("--output_dir", default="output/tmp", help="Output directory")
     parser.add_argument("--max_workers", type=int, default=mp.cpu_count(), help="Maximum number of workers for parallel processing")
+    parser.add_argument("-draw", action="store_true", help="Draw molecules")
     return parser.parse_args()
 
 name_smi_dict = {
@@ -320,18 +319,6 @@ def switch_base_and_empty_queue(
     atom_idx_queue = deque([idx])
     return current_base_aa, atom_idx_queue
 
-
-def sort_atom_highlights(mol_l):
-    atom_highlights = defaultdict(lambda: [])
-    for atom_idx in range(mol_l.GetNumAtoms()):
-        labelled_atom = mol_l.GetAtomWithIdx(atom_idx)
-        AA_label = labelled_atom.GetProp("AA")
-        if label_belongs_to_AA(AA_label):
-            three_letter_label = AA_label[:3]
-            atom_highlights[atom_idx].append(aa2color_dict[three_letter_label])
-    return atom_highlights
-
-
 def label_belongs_to_AA(label):
     shorter_label = label[:3]
     return shorter_label != "Unk" and not label.startswith("X")
@@ -385,58 +372,12 @@ def search_terminal_AA(mol_m):  # for highlight and searching terminal AA
     return peptide_bonded_props, peptide_bonded_atoms
 
 
-def highlight_bonds_with_AA(mol_s):  # with AA colors
-    bond_highlights = defaultdict(lambda: [])
-    for bond in mol_s.GetBonds():
-        atom1_i, atom2_i, prop1, prop2 = get_connected_atoms_and_props(bond, mol_s)
-        if (label_belongs_to_AA(prop1) and prop1 == prop2):  # if the bond is within the same AA
-            bond_highlights[bond.GetIdx()].append(aa2color_dict[prop1[:3]])
-    return bond_highlights
-
-
 def get_connected_atoms_and_props(bond, mol_t):
     atom1_i, atom2_i = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
     prop1, prop2 = mol_t.GetAtomWithIdx(atom1_i).GetProp("AA"), mol_t.GetAtomWithIdx(
         atom2_i
     ).GetProp("AA")
     return atom1_i, atom2_i, prop1, prop2
-
-
-def draw_input_mol(mol_n, mol_index, seq, bond_highlights):
-    atom_highlights = sort_atom_highlights(mol_n)
-    mol_name = f"mol_{mol_index}"
-    legend = f'{mol_name}\nseq: {seq}\n{"8< = peptide bond"}\nAA_NAME:SEEN_COUNT:SEQUENCE_POSITION\n'
-    draw_mol(mol_n, atom_highlights, bond_highlights, legend, mol_name)
-    create_colormap(aa2color_dict)
-
-
-def draw_mol(mol_o, atom_highlights, bond_highlights, legend, mol_name):
-    view = rdMolDraw2D.MolDraw2DSVG(600, 300)
-    view.drawOptions().useBWAtomPalette()
-    view.DrawMoleculeWithHighlights(
-        mol_o, legend, dict(atom_highlights), dict(bond_highlights), {}, {})
-    view.FinishDrawing()
-    svg = view.GetDrawingText()
-    draw_path = os.path.join(output_dir, f"{mol_name}.svg")
-    with open(draw_path, "w") as f:
-        f.write(svg)
-
-
-def create_colormap(aa2color_dict):
-    legend_data = [
-        (aa[:3], aa2color_dict[aa[:3]]) for aa in aa2color_dict if aa != "Unk"
-    ]
-    fig, ax = plt.subplots(figsize=(1, 1))
-    cmap = ListedColormap([color for _, color in legend_data])
-    cax = ax.matshow(np.arange(len(legend_data)).reshape(1, -1), cmap=cmap)
-    cbar = fig.colorbar(cax, ticks=np.arange(len(legend_data)), aspect=5)
-    cbar.set_ticklabels([label for label, _ in legend_data])
-    cbar.ax.tick_params(labelsize=3)
-    ax.axis("off")
-    legend_path = os.path.join(output_dir, "colormap.png")
-    plt.savefig(legend_path, bbox_inches="tight", dpi=300)
-    plt.close()
-
 
 def write_seq(aa_list):
     split_seq = []
@@ -735,7 +676,7 @@ def process_molecule_batch(batch_df, smi2mol, ignore_cyclic_peptide, min_amino_a
                         ter_or_not = detect_terminal(NNAA)
                         bond_sites = record_bond_sites(NNAA)
                         NNAAs_info.append((NNAA, ter_or_not, bond_sites))
-
+            
             local_mol_data.append((mol_index, mol, all_AA, None, peptide_bonds, NNAAs_info))
 
         except:
@@ -785,6 +726,14 @@ def label_molecules_in_batches(mol_df, batch_size, smi2mol, ignore_cyclic_peptid
 
     return NNAA_df, mol_df
 
+def highlight_bonds_with_AA(mol_s):  # with AA colors
+    bond_highlights = defaultdict(lambda: [])
+    for bond in mol_s.GetBonds():
+        atom1_i, atom2_i, prop1, prop2 = get_connected_atoms_and_props(bond, mol_s)
+        if (label_belongs_to_AA(prop1) and prop1 == prop2):  # if the bond is within the same AA
+            bond_highlights[bond.GetIdx()].append(aa2color_dict[prop1[:3]])
+    return bond_highlights
+
 
 def relabel_batch(mol_df, NNAA_df):
     # Initialize a list to collect row data
@@ -819,7 +768,7 @@ def relabel_batch(mol_df, NNAA_df):
             seq = ""
 
         # Collect data in a list of dictionaries
-        local_mol_data.append({'ID': mol_index, 'SEQUENCE': seq, 'ERROR': error})
+        local_mol_data.append({'ID': mol_index, 'SEQUENCE': seq, 'ERROR': error, 'BOND HIGHLIGHTS': bond_highlights})
 
     return pd.DataFrame(local_mol_data)
 
@@ -832,6 +781,7 @@ def relabel_batches(mol_df, NNAA_df, batch_size):
     # Ensure NNAA_df has an index
     if NNAA_df.index.empty:
         NNAA_df = NNAA_df.reset_index(drop=True)
+    mol_df['BOND HIGHLIGHTS'] = ""
     mol_df_copy = mol_df[mol_df['MOL'] != ""].copy()
     indices = list(mol_df_copy.index)
 
@@ -851,7 +801,7 @@ def relabel_batches(mol_df, NNAA_df, batch_size):
             mol_dataset_per_batch = future.result()
 
             for _, row in mol_dataset_per_batch.iterrows():
-                local_mol_df.loc[local_mol_df['ID'] == row['ID'], ['SEQUENCE', 'ERROR']] = row[['SEQUENCE', 'ERROR']].values
+                local_mol_df.loc[local_mol_df['ID'] == row['ID'], ['SEQUENCE', 'ERROR', 'BOND HIGHLIGHTS']] = row[['SEQUENCE', 'ERROR', 'BOND HIGHLIGHTS']].values
 
     return local_mol_df
 
@@ -878,7 +828,19 @@ def output_NNAA(NNAA_df, output_dir):
     NNAA_df.to_csv(os.path.join(output_dir, "raw/ncAAs_raw.txt"), sep='\t', index=False)
 
 
-def output_mols(mol_df, output_dir):
+def output_mols(mol_df, output_dir, draw):
+    if draw:
+        drawer = MoleculeDrawer(output_dir)
+        
+        def safe_draw(row):
+            try:
+                drawer.draw_input_mol(row['MOL'], row['ID'], row['SEQUENCE'], row['BOND HIGHLIGHTS'])
+            except Exception as e:
+                return None  # Return None to effectively ignore this row
+        
+        # Apply the safe drawing function to each row
+        mol_df.apply(lambda row: safe_draw(row), axis=1)
+
     mol_df.drop(columns=['MOL', 'PEPTIDE BONDS'], inplace=True)
 
     # bring 'SEQUENCE' column next to 'ID'
@@ -897,13 +859,12 @@ def get_rdkit_tautomer_hash(smi):
 def main():
     mol_df = load_data(input_file)
     NNAA_df, mol_df = label_molecules_in_batches(mol_df, batch_size, smi2mol, ignore_cyclic_peptide, min_amino_acids, max_workers)
-    print(NNAA_df)
     NNAA_df['TAUTOMER HASH'] = NNAA_df['SMILES'].apply(get_rdkit_tautomer_hash)
     NNAA_df = NNAAs_with_OH_removed(NNAA_df)
     NNAA_df = add_IDs(NNAA_df)
     mol_df = relabel_batches(mol_df, NNAA_df, batch_size)
     output_NNAA(NNAA_df, output_dir)
-    output_mols(mol_df, output_dir)
+    output_mols(mol_df, output_dir, draw)
 
 if __name__ == '__main__':
     args = parse_arguments()
@@ -914,6 +875,7 @@ if __name__ == '__main__':
     batch_size = args.batch_size
     output_dir = args.output_dir
     max_workers = args.max_workers
+    draw = args.draw
 
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(os.path.join(output_dir, "raw"), exist_ok=True)

@@ -1,6 +1,6 @@
 # Monomerizer
 
-Monomerizer (or SMILES2Seq, SMILES2FASTA) #SMILES2FASTAconverts peptides and peptidomimetics, represented as SMILES (chemical formulae), into sequences of amino acids and terminal modifications.
+Monomerizer (or SMILES2Seq, #SMILES2FASTA) converts peptides and peptidomimetics, represented as SMILES (chemical formulae), into sequences of amino acids and terminal modifications.
 
 For more information, visit:  [Monomerizer Documentation](https://...)
 To use the output data to finetune our foundation language model for peptidomimetics, visit: [GPepT](https://huggingface.co/Playingyoyo/GPepT)
@@ -26,5 +26,7 @@ python3 run_pipeline.py --input_file demo/example_smiles.txt
 - `--min_amino_acids <int>`: Minimum number of amino acids required for processing. Default is `3`.
 - `--batch_size <int>`: Number of SMILES to process in each batch. Default is `100`.
 - `--max_workers <int>`: Maximum number of parallel workers. Default is the number of available CPU cores.
+- `-draw`: Draws output file like this. 
+![alt text](demo/example.svg)
 
 ---

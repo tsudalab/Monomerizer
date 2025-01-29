@@ -36,19 +36,22 @@ if __name__ == "__main__":
     parser.add_argument("--min_amino_acids", type=int, help="Minimum number of amino acids required")
     parser.add_argument("--batch_size", type=int, help="Batch size for processing")
     parser.add_argument("--max_workers", type=int, help="Maximum number of workers for parallel processing")
+    parser.add_argument("-draw", action="store_true", help="Draw the molecules")
 
     args = parser.parse_args()
 
     # Prepare extra arguments for monomerizer.py
     monomerizer_args = []
     if args.process_cyclic:
-        monomerizer_args.append("--process_cyclic")
+        monomerizer_args.append("-process_cyclic")
     if args.min_amino_acids:
-        monomerizer_args.extend(["--min_amino_acids", str(args.min_amino_acids)])
+        monomerizer_args.extend(["--min_amino_acids", int(args.min_amino_acids)])
     if args.batch_size:
         monomerizer_args.extend(["--batch_size", str(args.batch_size)])
     if args.max_workers:
         monomerizer_args.extend(["--max_workers", str(args.max_workers)])
+    if args.draw:
+        monomerizer_args.append("-draw")
 
     # Run the pipeline
     run_pipeline(args.input_file, args.output_dir, monomerizer_args=monomerizer_args)
