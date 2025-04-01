@@ -16,8 +16,11 @@ output_file_10 = os.path.join(args.output_dir, 'for_GPepT/val10.txt')
 
 # Check if the input file exists
 if not os.path.exists(input_file):
-    print(f"Error: The input file '{input_file}' does not exist.")
-    exit(1)
+    # No ncAAs?
+    input_file = os.path.join(args.output_dir, 'raw/sequences_raw.txt')
+    if not os.path.exists(input_file):
+        print(f"Error: The input file '{input_file}' does not exist.")
+        exit(1)
 
 # Read the input file into a pandas DataFrame
 df = pd.read_csv(input_file, sep='\t')
