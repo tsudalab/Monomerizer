@@ -2,3 +2,4 @@ pandas==2.2.2
 rdkit-pypi==2022.9.5
 tqdm==4.67.1
 argparse==1.4.0
+matplotlib==3.8.0
