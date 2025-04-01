@@ -776,7 +776,6 @@ def relabel_batches(mol_df, NNAA_df, batch_size):
     # Check if NNAA_df is empty
     if NNAA_df.empty:
         print("Warning: NNAA_df is empty. No NNAAs to process.")
-        return mol_df
 
     # Ensure NNAA_df has an index
     if NNAA_df.index.empty:
