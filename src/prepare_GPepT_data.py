@@ -23,7 +23,7 @@ if not os.path.exists(input_file):
 df = pd.read_csv(input_file, sep='\t')
 
 # Extract sequences and add <endoftext> to each
-sequences = df['SEQUENCE'].apply(lambda x: x + '<endoftext>')
+sequences = df['SEQUENCE'].apply(lambda x: x + '<|endoftext|>')
 
 # Shuffle the sequences to randomize the split
 sequences = sequences.sample(frac=1, random_state=42).reset_index(drop=True)
