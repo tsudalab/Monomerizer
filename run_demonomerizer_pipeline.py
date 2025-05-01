@@ -37,7 +37,7 @@ def run_pipeline(sequence_file, output_dir, demonomerized_file, demonomerizer_ar
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the demonomerizer pipeline.")
-    parser.add_argument("--sequence_file", default="sequences_generated.txt", help="Input sequence file")
+    parser.add_argument("--sequence_file", default="demonomerized.txt", help="Input sequence file")
     parser.add_argument("--output_dir", default=f"output/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}", help="Directory to store output")
     parser.add_argument("--demonomerized_file", default="sequences_standardized.txt", help="Output demonomerized file name")
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for demonomerizer.py")
