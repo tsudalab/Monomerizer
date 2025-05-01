@@ -6,12 +6,16 @@ import pandas as pd
 from tqdm import tqdm
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
 
 # Parse the input arguments
 parser = argparse.ArgumentParser(description="Preprocess the generated sequences file")
-parser.add_argument("--input_file", type=str, help="Path to the generated sequences file", default="output/sequences_generated.txt")
-parser.add_argument("--NNAA_file", type=str, help="Path to the NNAA file", default="output/ncAAs_standard.txt")
-parser.add_argument("--batch_size", type=int, help="Batch size for processing sequences", default=10)
+parser.add_argument("--sequence_file", type=str, help="Path to the generated sequences file", default="sequences_generated.txt")
+parser.add_argument("--NNAA_file", type=str, help="Path to the NNAA file", default="dictionary.txt")
+parser.add_argument("--batch_size", type=int, help="Batch size for processing sequences", default=8)
+parser.add_argument("--output_dir", type=str, help="Output directory", default="output")
+parser.add_argument("--demonomerized_file", type=str, help="Output demonomerized file name", default="demonomerized.txt")
+
 args = parser.parse_args()
 
 valid_backbone = Chem.MolFromSmarts("[NH,NH2]CC(=O)")
@@ -91,7 +95,7 @@ def clear_props(atom1, atom2):
     atom1.ClearProp("atomNote")
     atom2.ClearProp("atomNote")
 
-def get_amino_mol(amino_name):
+def get_amino_mol(amino_name, name_smi_dict, NNAA_file):
     for aa_name, aa_smi in name_smi_dict.items():
         if aa_name == amino_name:
             amino_mol = Chem.MolFromSmiles(aa_smi)
@@ -102,12 +106,13 @@ def get_amino_mol(amino_name):
                 for index, row in NNAA_file.iterrows():
                     name = row["ID"]
                     if name == amino_name:
-                        bond_info = ast.literal_eval(row["BOND_SITES"])
+                        bond_info = ast.literal_eval(row["Bond sites"])
                         smiles_rootedAtAtom0 = bond_info[0]
                         bond_sites = bond_info[1:]
                         amino_mol = Chem.MolFromSmiles(smiles_rootedAtAtom0)
                         mark_edge_NNAA(amino_mol, bond_sites)
             return amino_mol
+        
 
 def process_batch(batch_df):
     results = []
@@ -124,14 +129,14 @@ def process_row(index, row):
         
         try:
             for alphabet in split_seq:
-                amino_mol = get_amino_mol(alphabet)
+                amino_mol = get_amino_mol(alphabet, name_smi_dict, NNAA_file)
                 ordered_aminos.append(amino_mol)
 
             # Replace the last amino with the terminal amino
             amino_ter = split_seq[-1]
-            if not "ter" in amino_ter:
+            if not "ter" in amino_ter and not amino_ter.startswith("Z"):
                 amino_ter = f"{amino_ter}ter"
-            last_mol = get_amino_mol(amino_ter)
+            last_mol = get_amino_mol(amino_ter, name_smi_dict, NNAA_file)
             ordered_aminos[-1] = last_mol
 
             combined = ordered_aminos[0]
@@ -173,14 +178,14 @@ for index, row in NNAA_file.iterrows():
         rwmol.RemoveAtom(OH_i)
         noOH_smiles = Chem.MolToSmiles(rwmol)
         name_smi_dict[name] = noOH_smiles
-    if not "ter" in name:
+    if not name.startswith("Z"):
         name = f"{name}ter"
     name_smi_dict[name] = smiles
 
-tokenizer = r"[A-WYZ]|X\d+ter+|X\d+"
+tokenizer = r"X\d+|Z\d+|[A-WY]"
 regex = re.compile(tokenizer)
 
-df = pd.read_csv(args.input_file, sep="\t")
+df = pd.read_csv(args.sequence_file, sep="\t")
 
 # add a column for SMILES
 df["SMILES"] = ""
@@ -198,6 +203,9 @@ with ThreadPoolExecutor() as executor:
             if smiles:
                 df.at[index, "SMILES"] = smiles
 
-# Save output
-output_file = f"output/sequences_generated_demonomerized.txt"
+# ✅ Use output_dir in your logic
+os.makedirs(args.output_dir, exist_ok=True)
+output_file = os.path.join(args.output_dir, args.demonomerized_file)
+
+# Assuming `df` is your final DataFrame
 df.to_csv(output_file, sep="\t", index=False)
