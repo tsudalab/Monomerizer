@@ -49,7 +49,7 @@ To decode the generated peptidomimetics back to SMILES and analyze molecules gen
 2. Run the analysis pipeline with the following command:
 
 ```
-python3 GPepT_analysis_pipeline.py --sequence_file PATH_TO_INPUT_FILE
+python3 GPepT_analysis_pipeline.py --sequence_file PATH/TO/INPUT_FILE
 ```
 
 - By default, the demonomerized SMILES and the analysis report will be saved to the `output/<datetime>` directory.
