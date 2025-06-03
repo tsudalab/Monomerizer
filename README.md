@@ -4,8 +4,6 @@ Monomerizer (or SMILES2Seq, #SMILES2FASTA) is a pipeline that converts proteins,
 
 For more information, visit our [preprint](https://chemrxiv.org/engage/chemrxiv/article-details/67ecf39181d2151a02aad52a).
 
-![alt text](TOC.png)
-
 To use the output data to finetune our foundation language model for peptidomimetics, visit: [GPepT](https://huggingface.co/Playingyoyo/GPepT)
 
 ---
